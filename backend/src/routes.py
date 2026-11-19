@@ -5,7 +5,7 @@ from .models import *
 from .schemas import *
 from .security import current,allow
 from .common import *
-from . import entrance_service as entrance,proposal_service as proposal,publication_service as publication,directory_service as directory
+from . import entrance_service as entrance,proposal_service as proposal,publication_service as publication,directory_service as directory,batch_service as batch
 router=APIRouter()
 def change(u,action,fn,supervisor=False):
  allow(u,*(['supervisor'] if supervisor else ['operator','supervisor']))
@@ -13,10 +13,29 @@ def change(u,action,fn,supervisor=False):
   x=fn(s);log(s,u,action,dump(x));s.commit();return dump(x)
 @router.get('/register')
 def register(u=Depends(current)):
- with Session() as s:return {name:[dump(x) for x in rows(s,cls)] for name,cls in [('entrances',Entrance),('aliases',Alias),('evidence',Evidence),('runs',MatchRun),('candidates',Candidate),('proposals',Proposal),('objections',Objection),('notices',Notice),('redirects',Redirect),('clock',Registry)]}
+ from .correction import correction_map,batch_summaries
+ with Session() as s:
+  payload={name:[dump(x) for x in rows(s,cls)] for name,cls in [('entrances',Entrance),('aliases',Alias),('evidence',Evidence),('runs',MatchRun),('candidates',Candidate),('proposals',Proposal),('objections',Objection),('notices',Notice),('redirects',Redirect),('batches',Batch),('controls',Control),('clock',Registry)]}
+  payload['batch_summaries']=batch_summaries(s)
+  payload['corrections']=list(correction_map(s).values())
+  current=int(getattr(s.get(Registry,1),'correction_version',0) or 0)
+  payload['correction_version']=current
+  payload['current_run_id']=next((r.id for r in reversed(rows(s,MatchRun)) if r.state=='ready' and int(r.correction_version or 0)==current),None)
+  return payload
 @router.get('/audit')
 def audit(u=Depends(current)):
  with Session() as s:return [dump(x) for x in rows(s,Audit)]
+@router.get('/corrections/preview')
+def correction_preview(u=Depends(current)):
+ with Session() as s:return batch.preview(s)
+@router.post('/batches')
+def bcreate(d:BatchIn,u=Depends(current)):return change(u,'登记采点批次',lambda s:batch.create_batch(s,d.model_dump()))
+@router.post('/batches/assign')
+def bassign(d:BatchAssignIn,u=Depends(current)):return change(u,'登记入口采点批次',lambda s:batch.assign_batch(s,d.entrance_id,d.batch_id))
+@router.post('/controls')
+def ccreate(d:ControlIn,u=Depends(current)):return change(u,'登记复测对照',lambda s:batch.upsert_control(s,d.model_dump()))
+@router.delete('/controls/{id}')
+def cremove(id:int,u=Depends(current)):return change(u,'删除复测对照',lambda s:batch.remove_control(s,id),True)
 @router.post('/entrances')
 def ecreate(d:EntranceIn,u=Depends(current)):return change(u,'登记入口',lambda s:entrance.create_entrance(s,d.model_dump()))
 @router.patch('/entrances/{id}/location')
@@ -27,7 +46,8 @@ def aliases(d:AliasIn,u=Depends(current)):return change(u,'登记别名',lambda 
 def evidence(d:EvidenceIn,u=Depends(current)):return change(u,'登记证据',lambda s:entrance.evidence(s,d.model_dump()))
 @router.post('/matches')
 def matching(u=Depends(current)):
- def create(s):lock(s);x=MatchRun(state='queued');s.add(x);s.flush();return x
+ def create(s):
+  r=lock(s);x=MatchRun(state='queued',correction_version=int(r.correction_version or 0));s.add(x);s.flush();return x
  d=change(u,'匹配别名',create)
  try:redis.from_url(os.environ['REDIS_URL']).rpush('address:matching',d['id'])
  except Exception:

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from .models import Proposal,Notice,Objection,Alias,Evidence
+from .models import *
 from .common import *
 from .proposal_service import pair
 from .directory_service import activate
@@ -12,9 +12,12 @@ def publish(s,d):
  start=timestamp(r.now);n=Notice(proposal_id=p.id,starts=start.isoformat(),ends=(start+timedelta(days=d['days'])).isoformat());s.add(n);p.state='public';s.flush();return n
 def effective(s,id):
  r=lock(s);n=get(s,Notice,id);p=get(s,Proposal,n.proposal_id)
+ current=int(getattr(r,'correction_version',0) or 0)
  if n.state!='public' or p.state!='public':fail('公示不是待生效状态')
  if timestamp(r.now)<timestamp(n.ends):fail('公示期限未满')
  if any(x.proposal_id==p.id and x.state=='open' for x in rows(s,Objection)):fail('居民异议未结，不能生效')
+ if int(p.correction_version or 0)!=current:
+  fail('复测对照已更新，提案所依据的校正版本已过期；请重新核对候选后重建提案')
  pair(s,p.source_id,p.target_id);redirect=activate(s,p,r.now);n.state='effective';p.state='active';return redirect
 def advance(s,d):
  r=lock(s);new=timestamp(d['now'])

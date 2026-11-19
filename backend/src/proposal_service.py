@@ -6,7 +6,9 @@ def pair(s,a,b):
  if x.street!=y.street or x.number!=y.number:fail('道路或门牌数字冲突，不得归并')
  return x,y
 def create(s,d):
- lock(s);pair(s,d['source_id'],d['target_id']);x=Proposal(**d);s.add(x);s.flush();return x
+ r=lock(s);pair(s,d['source_id'],d['target_id'])
+ d=dict(d);d['correction_version']=int(getattr(r,'correction_version',0) or 0)
+ x=Proposal(**d);s.add(x);s.flush();return x
 def object_to(s,d):
  lock(s);p=get(s,Proposal,d['proposal_id'])
  if p.state not in ['draft','public']:fail('只能在生效前提交异议')

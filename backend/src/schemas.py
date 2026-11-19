@@ -5,9 +5,15 @@ class Input(BaseModel):
 class Login(Input):
  email:str;password:str
 class EntranceIn(Input):
- code:str=Field(min_length=2,max_length=40);street:str=Field(min_length=2,max_length=80);number:int=Field(ge=1,le=99999);label:str=Field(min_length=3,max_length=100);lat:float=Field(ge=-90,le=90);lng:float=Field(ge=-180,le=180)
+ code:str=Field(min_length=2,max_length=40);street:str=Field(min_length=2,max_length=80);number:int=Field(ge=1,le=99999);label:str=Field(min_length=3,max_length=100);lat:float=Field(ge=-90,le=90);lng:float=Field(ge=-180,le=180);batch_id:int|None=None
 class LocationIn(Input):
  lat:float=Field(ge=-90,le=90);lng:float=Field(ge=-180,le=180);reason:str=Field(min_length=8,max_length=400)
+class BatchIn(Input):
+ code:str=Field(min_length=2,max_length=40);name:str=Field(min_length=2,max_length=80);note:str=Field(default='',max_length=500)
+class BatchAssignIn(Input):
+ entrance_id:int;batch_id:int
+class ControlIn(Input):
+ entrance_id:int;batch_id:int;true_lat:float=Field(ge=-90,le=90);true_lng:float=Field(ge=-180,le=180);note:str=Field(min_length=8,max_length=500)
 class AliasIn(Input):
  entrance_id:int;text:str=Field(min_length=3,max_length=120)
 class EvidenceIn(Input):
